@@ -49,7 +49,7 @@ func run(mode string) error {
 	if err != nil {
 		return err
 	}
-	defer shutdownObs(context.Background())
+	defer func() { _ = shutdownObs(context.Background()) }()
 
 	s, err := store.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -65,7 +65,7 @@ func run(mode string) error {
 		return err
 	}
 	rdb := redis.NewClient(opt)
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	q, err := queue.New(ctx, rdb)
 	if err != nil {
 		return err

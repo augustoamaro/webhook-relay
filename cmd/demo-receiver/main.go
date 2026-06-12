@@ -29,14 +29,14 @@ func main() {
 	http.HandleFunc("POST /hook", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if maxDelayMS > 0 {
-			time.Sleep(time.Duration(rand.IntN(maxDelayMS)) * time.Millisecond)
+			time.Sleep(time.Duration(rand.IntN(maxDelayMS)) * time.Millisecond) //nolint:gosec // non-cryptographic randomness is intentional for demo timing
 		}
 		if secret != "" && !verify(secret, r.Header, body) {
 			slog.Error("bad signature", "id", r.Header.Get("webhook-id"))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if rand.Float64() < failRate {
+		if rand.Float64() < failRate { //nolint:gosec // non-cryptographic randomness is intentional for demo timing
 			failed.Add(1)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -46,10 +46,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	http.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"received":%d,"failed":%d}`, received.Load(), failed.Load())
+		_, _ = fmt.Fprintf(w, `{"received":%d,"failed":%d}`, received.Load(), failed.Load())
 	})
 	slog.Info("demo-receiver listening", "port", port, "fail_rate", failRate)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	srv := &http.Server{Addr: ":" + port, Handler: nil, ReadHeaderTimeout: 5 * time.Second}
+	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
 	}
@@ -65,7 +66,7 @@ func verify(secret string, h http.Header, body []byte) bool {
 		return false
 	}
 	mac := hmac.New(sha256.New, key)
-	fmt.Fprintf(mac, "%s.%s.", h.Get("webhook-id"), h.Get("webhook-timestamp"))
+	_, _ = fmt.Fprintf(mac, "%s.%s.", h.Get("webhook-id"), h.Get("webhook-timestamp"))
 	mac.Write(body)
 	want := "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	for _, sig := range strings.Split(h.Get("webhook-signature"), " ") {

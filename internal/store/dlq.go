@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// IncEndpointFailures increments consecutive_failures for an endpoint and returns the new count.
 func (s *Store) IncEndpointFailures(ctx context.Context, endpointID string) (int, error) {
 	var n int
 	err := s.pool.QueryRow(ctx,
@@ -14,6 +15,7 @@ func (s *Store) IncEndpointFailures(ctx context.Context, endpointID string) (int
 	return n, err
 }
 
+// ResetEndpointFailures clears the consecutive failure counter after a successful delivery.
 func (s *Store) ResetEndpointFailures(ctx context.Context, endpointID string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE endpoints SET consecutive_failures = 0 WHERE id = $1`, endpointID)
@@ -39,6 +41,7 @@ func (s *Store) TripBreaker(ctx context.Context, endpointID string) error {
 	return tx.Commit(ctx)
 }
 
+// DeliverySummary is a row returned by ListDeliveries for the API response.
 type DeliverySummary struct {
 	ID             string
 	MessageID      string

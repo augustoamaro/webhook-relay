@@ -36,7 +36,7 @@ func testSetup(t *testing.T) (*store.Store, context.Context) {
 	return s, ctx
 }
 
-func seed(t *testing.T, s *store.Store, ctx context.Context, url string) (string, string) {
+func seed(ctx context.Context, t *testing.T, s *store.Store, url string) (string, string) {
 	t.Helper()
 	app, _, _ := s.CreateApplication(ctx, "acme")
 	ep, _ := s.CreateEndpoint(ctx, app.ID, url, nil)
@@ -63,11 +63,11 @@ func TestHandleDeliversSignsAndSucceeds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	dlvID, msgID := seed(t, s, ctx, srv.URL)
+	dlvID, msgID := seed(ctx, t, s, srv.URL)
 	w := New(s, netguard.NewClient(10*time.Second, true), nil)
 	w.Handle(ctx, dlvID)
 
-	status, attempts := deliveryState(t, s, ctx, dlvID)
+	status, attempts := deliveryState(ctx, t, s, dlvID)
 	if status != string(domain.StatusSucceeded) || attempts != 1 {
 		t.Fatalf("state: %s/%d", status, attempts)
 	}
@@ -83,11 +83,11 @@ func TestHandleFailureSchedulesRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	dlvID, _ := seed(t, s, ctx, srv.URL)
+	dlvID, _ := seed(ctx, t, s, srv.URL)
 	w := New(s, netguard.NewClient(10*time.Second, true), nil)
 	w.Handle(ctx, dlvID)
 
-	status, attempts := deliveryState(t, s, ctx, dlvID)
+	status, attempts := deliveryState(ctx, t, s, dlvID)
 	if status != string(domain.StatusFailed) || attempts != 1 {
 		t.Fatalf("state: %s/%d", status, attempts)
 	}
@@ -101,7 +101,7 @@ func TestHandleIsNoOpWhenNotClaimable(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer srv.Close()
-	dlvID, _ := seed(t, s, ctx, srv.URL)
+	dlvID, _ := seed(ctx, t, s, srv.URL)
 	w := New(s, netguard.NewClient(10*time.Second, true), nil)
 	w.Handle(ctx, dlvID)
 	w.Handle(ctx, dlvID) // duplicate enqueue: must lose the claim and not POST again
@@ -111,7 +111,7 @@ func TestHandleIsNoOpWhenNotClaimable(t *testing.T) {
 }
 
 // deliveryState reads status + attempt_count via the exported test hook.
-func deliveryState(t *testing.T, s *store.Store, ctx context.Context, id string) (string, int) {
+func deliveryState(ctx context.Context, t *testing.T, s *store.Store, id string) (string, int) {
 	t.Helper()
 	status, attempts, err := s.DeliveryState(ctx, id)
 	if err != nil {

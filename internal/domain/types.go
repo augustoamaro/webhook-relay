@@ -2,8 +2,10 @@ package domain
 
 import "time"
 
+// DeliveryStatus is the lifecycle state of a single webhook delivery.
 type DeliveryStatus string
 
+// Delivery lifecycle states.
 const (
 	StatusPending    DeliveryStatus = "pending"
 	StatusDelivering DeliveryStatus = "delivering"
@@ -22,12 +24,14 @@ const (
 	LeaseSeconds = 60
 )
 
+// Application is the top-level tenant; each application owns its own endpoints.
 type Application struct {
 	ID        string
 	Name      string
 	CreatedAt time.Time
 }
 
+// Endpoint is a webhook target URL registered under an application.
 type Endpoint struct {
 	ID                  string
 	ApplicationID       string
@@ -39,6 +43,7 @@ type Endpoint struct {
 	CreatedAt           time.Time
 }
 
+// Message is an inbound event to be fanned out to the application's endpoints.
 type Message struct {
 	ID             string
 	ApplicationID  string

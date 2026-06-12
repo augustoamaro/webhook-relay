@@ -50,7 +50,7 @@ func TestSweepEnqueuesDueDeliveries(t *testing.T) {
 	}
 }
 
-func TestRunStopsOnContextCancel(t *testing.T) {
+func TestRunStopsOnContextCancel(_ *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// Run with nil deps must return immediately on cancelled context

@@ -28,12 +28,14 @@ type Metrics struct {
 	endToEnd   metric.Float64Histogram
 }
 
+// DeliveryAttempt records a delivery attempt counter and its duration, tagged by outcome.
 func (m *Metrics) DeliveryAttempt(outcome string, d time.Duration) {
 	ctx := context.Background()
 	m.attempts.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 	m.attemptDur.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String("outcome", outcome)))
 }
 
+// EndToEnd records the elapsed time from message creation to successful delivery.
 func (m *Metrics) EndToEnd(d time.Duration) {
 	m.endToEnd.Record(context.Background(), d.Seconds())
 }

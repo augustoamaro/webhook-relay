@@ -16,10 +16,12 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// Store is the data-access layer; all SQL lives here, backed by a pgxpool.
 type Store struct {
 	pool *pgxpool.Pool
 }
 
+// Open dials Postgres, pings the pool, and returns a ready Store.
 func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -32,6 +34,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	return &Store{pool: pool}, nil
 }
 
+// Close drains and closes the connection pool.
 func (s *Store) Close() { s.pool.Close() }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
@@ -40,6 +43,8 @@ func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 // serializes concurrent Migrate() callers (api/worker/sweeper all migrate on boot).
 const migrationLockKey int64 = 0x7762_7265_6C61_79 // "wbrelay"
 
+// Migrate runs all pending goose migrations under a pg_advisory_lock so that
+// concurrent replicas starting together don't race.
 func (s *Store) Migrate(ctx context.Context) error {
 	// Serialize concurrent migrators (multiple replicas start together).
 	conn, err := s.pool.Acquire(ctx)
@@ -57,7 +62,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	db := stdlib.OpenDBFromPool(s.pool)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	return goose.UpContext(ctx, db, "migrations")
 }
 

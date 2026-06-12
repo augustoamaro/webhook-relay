@@ -32,7 +32,7 @@ func checkAddr(address string) error {
 func NewClient(timeout time.Duration, allowPrivate bool) *http.Client {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	if !allowPrivate {
-		dialer.Control = func(network, address string, _ syscall.RawConn) error {
+		dialer.Control = func(_, address string, _ syscall.RawConn) error {
 			return checkAddr(address)
 		}
 	}

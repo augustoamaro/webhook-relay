@@ -23,12 +23,15 @@ type Metrics interface {
 	EndToEnd(d time.Duration)
 }
 
+// Worker claims deliveries from the queue, signs them, POSTs to the endpoint,
+// and records the outcome — including retry scheduling and circuit-breaker trips.
 type Worker struct {
 	store   *store.Store
 	client  *http.Client
 	metrics Metrics
 }
 
+// New returns a Worker backed by the given store and HTTP client.
 func New(s *store.Store, client *http.Client, m Metrics) *Worker {
 	return &Worker{store: s, client: client, metrics: m}
 }
@@ -70,7 +73,7 @@ func (w *Worker) Handle(ctx context.Context, deliveryID string) {
 	}
 
 	completed := cd.AttemptCount + 1
-	delay, retry := domain.NextDelay(completed, rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())))
+	delay, retry := domain.NextDelay(completed, rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))) //nolint:gosec // non-cryptographic randomness is intentional for jitter
 	deadReason := ""
 	if !retry {
 		deadReason = "max_attempts"
@@ -119,7 +122,7 @@ func (w *Worker) attempt(ctx context.Context, cd *store.ClaimedDelivery) (int, s
 	if err != nil {
 		return 0, err.Error(), ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, snippetCap))
 	errMsg := ""
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

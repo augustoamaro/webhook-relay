@@ -25,7 +25,7 @@ func Sign(secret, msgID string, ts time.Time, payload []byte) (string, error) {
 		return "", fmt.Errorf("decode secret: %w", err)
 	}
 	mac := hmac.New(sha256.New, key)
-	fmt.Fprintf(mac, "%s.%d.", msgID, ts.Unix())
+	_, _ = fmt.Fprintf(mac, "%s.%d.", msgID, ts.Unix())
 	mac.Write(payload)
 	return "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil)), nil
 }

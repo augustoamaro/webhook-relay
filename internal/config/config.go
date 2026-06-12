@@ -1,3 +1,4 @@
+// Package config loads and validates the relay's runtime configuration.
 package config
 
 import (
@@ -5,6 +6,7 @@ import (
 	"strconv"
 )
 
+// Config holds the runtime configuration for the relay service.
 type Config struct {
 	DatabaseURL              string
 	RedisURL                 string

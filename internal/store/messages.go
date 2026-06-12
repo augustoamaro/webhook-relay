@@ -7,6 +7,7 @@ import (
 	"github.com/augustoamaro/webhook-relay/internal/domain"
 )
 
+// IngestResult is returned by IngestMessage; Duplicate is true when the idempotency key already existed.
 type IngestResult struct {
 	Message     domain.Message
 	DeliveryIDs []string

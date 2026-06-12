@@ -52,6 +52,7 @@ func (s *Store) ClaimDelivery(ctx context.Context, id string) (*ClaimedDelivery,
 	return &cd, nil
 }
 
+// FinishSuccess marks a delivery succeeded and records the terminal status code.
 func (s *Store) FinishSuccess(ctx context.Context, id string, statusCode int) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE deliveries
@@ -83,6 +84,7 @@ func (s *Store) FinishFailure(ctx context.Context, id string, delay time.Duratio
 	return err
 }
 
+// DueDelivery is a minimal row returned by DueDeliveries for the sweeper.
 type DueDelivery struct {
 	ID          string
 	Traceparent string

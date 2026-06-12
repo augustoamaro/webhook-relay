@@ -1,3 +1,4 @@
+// Package domain holds the core types and business rules; no I/O.
 package domain
 
 import "slices"

@@ -12,6 +12,7 @@ import (
 	"github.com/augustoamaro/webhook-relay/internal/store"
 )
 
+// Server is the HTTP API surface: thin handlers over the store and queue.
 type Server struct {
 	store      *store.Store
 	queue      *queue.Queue
@@ -19,10 +20,12 @@ type Server struct {
 	maxPayload int64
 }
 
+// NewServer returns a Server backed by the given store and queue.
 func NewServer(s *store.Store, q *queue.Queue, adminKey string, maxPayload int64) *Server {
 	return &Server{store: s, queue: q, adminKey: adminKey, maxPayload: maxPayload}
 }
 
+// Handler builds and returns the API router.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
