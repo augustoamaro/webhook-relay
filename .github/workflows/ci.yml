@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay
+          POSTGRES_DB: relay
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relay" --health-interval 5s
+          --health-timeout 5s --health-retries 15
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 15
+    env:
+      RELAY_TEST_DATABASE_URL: postgres://relay:relay@localhost:5432/relay
+      RELAY_TEST_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install golangci-lint v2
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.12.2
+      - name: Lint
+        run: "$(go env GOPATH)/bin/golangci-lint run"
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Tests (unit + integration, race, serialized)
+        run: go test ./... -race -p 1 -count=1
+      - name: Build all binaries
+        run: go build ./...
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose up
+        run: docker compose -f deploy/docker-compose.yml up --build -d
+      - name: Wait for API
+        run: timeout 120 bash -c 'until curl -sf localhost:8080/healthz; do sleep 2; done'
+      - name: End-to-end ingest
+        run: |
+          APP=$(curl -s -X POST localhost:8080/api/v1/applications \
+            -H 'authorization: Bearer dev-admin-key' -H 'content-type: application/json' \
+            -d '{"name":"ci"}')
+          APPID=$(echo "$APP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+          APPKEY=$(echo "$APP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["api_key"])')
+          curl -sf -X POST localhost:8080/api/v1/applications/$APPID/endpoints \
+            -H 'authorization: Bearer dev-admin-key' -H 'content-type: application/json' \
+            -d '{"url":"http://demo-receiver:9090/hook","event_types":[]}' -o /dev/null
+          for i in $(seq 1 10); do
+            curl -sf -X POST localhost:8080/api/v1/applications/$APPID/messages \
+              -H "authorization: Bearer $APPKEY" -H 'content-type: application/json' \
+              -d "{\"event_type\":\"order.created\",\"payload\":{\"n\":$i}}" -o /dev/null
+          done
+      - name: Reconcile ledger (zero lost)
+        run: docker compose -f deploy/docker-compose.yml run --rm --entrypoint reconcile api
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml logs --tail=100
+      - name: Compose down
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v
