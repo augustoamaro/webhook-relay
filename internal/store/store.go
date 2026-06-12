@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,7 +19,8 @@ var migrationsFS embed.FS
 
 // Store is the data-access layer; all SQL lives here, backed by a pgxpool.
 type Store struct {
-	pool *pgxpool.Pool
+	pool      *pgxpool.Pool
+	migrateMu sync.Mutex // serializes Migrate within a process (the advisory lock handles cross-process)
 }
 
 // Open dials Postgres, pings the pool, and returns a ready Store.
@@ -46,7 +48,13 @@ const migrationLockKey int64 = 0x7762_7265_6C61_79 // "wbrelay"
 // Migrate runs all pending goose migrations under a pg_advisory_lock so that
 // concurrent replicas starting together don't race.
 func (s *Store) Migrate(ctx context.Context) error {
-	// Serialize concurrent migrators (multiple replicas start together).
+	// Serialize in-process callers first: holding the advisory lock on one
+	// pooled connection while goose draws another can exhaust a small pool if
+	// several goroutines enter together (deadlock). The mutex keeps at most one
+	// in-process migration active; the advisory lock still guards other replicas.
+	s.migrateMu.Lock()
+	defer s.migrateMu.Unlock()
+
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire migration conn: %w", err)
