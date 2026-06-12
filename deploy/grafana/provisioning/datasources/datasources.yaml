@@ -2,8 +2,10 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    uid: prometheus # fixed uid so the provisioned dashboard's panels resolve it
     url: http://prometheus:9090
     isDefault: true
   - name: Tempo
     type: tempo
+    uid: tempo
     url: http://tempo:3200
