@@ -10,7 +10,7 @@ A webhook delivery service that doesn't lose your events — Postgres ledger, Re
 
 ## Chaos proof: 14,399/14,399 delivered, zero lost
 
-The signature end-to-end test (`make chaos`) runs `loadtest/steady.js` against a live compose stack and issues a `FLUSHALL` against Redis 40 seconds into the load. Redis holds only delivery pointers — the authoritative ledger is Postgres. The sweeper detects the gap, rebuilds the dispatch queue from the `deliveries` table, idempotent worker claims absorb any duplicates, and every delivery reaches `succeeded`.
+The signature end-to-end test (`make chaos`) runs `loadtest/steady.js` against a live compose stack and issues a `FLUSHALL` against Redis 45 seconds into the load. Redis holds only delivery pointers — the authoritative ledger is Postgres. The sweeper detects the gap, rebuilds the dispatch queue from the `deliveries` table, idempotent worker claims absorb any duplicates, and every delivery reaches `succeeded`.
 
 Measured on a dev machine (podman), 10→100→100→0 req/s ramp over 2m45s:
 
@@ -31,7 +31,7 @@ deliveries: pending=0   delivering=0 failed=0 succeeded=14399 dead=0
 RECONCILED: every delivery reached a terminal state — zero lost
 ```
 
-Why it works: `IngestMessage` commits message + fan-out deliveries in a single Postgres transaction before touching Redis. The optimistic Redis enqueue is best-effort. The sweeper runs every second, scans `deliveries WHERE status IN ('pending','failed') AND next_attempt_at <= now AND claimed_at IS NULL`, and re-enqueues anything missing. A `FLUSHALL` empties the queue; the sweeper notices on the next tick and fills it back. Redis is intentionally disposable.
+Why it works: `IngestMessage` commits message + fan-out deliveries in a single Postgres transaction before touching Redis. The optimistic Redis enqueue is best-effort. The sweeper runs every second, scans `deliveries` for rows that are due (`status IN ('pending','failed') AND next_attempt_at <= now()`) or whose worker lease has expired (`status = 'delivering' AND claimed_at < now()-60s`), skipping any row re-enqueued in the last 30 seconds, and pushes them back into the Redis stream. A `FLUSHALL` empties the queue; the sweeper notices on the next tick and fills it back. Redis is intentionally disposable.
 
 Delivery throughput: 2 worker replicas drained the ~14k backlog (accumulated during the 2m45s ingest burst) in ~3.5 minutes, sustaining ~41 deliveries/s. Workers process stream batches sequentially today — per-message concurrency is a documented follow-up.
 
@@ -193,7 +193,7 @@ Measured on a dev machine (podman). `loadtest/steady.js` ramps 10→100→100→
 | Ingest p95 | 15.36ms |
 | Ingest max | 70.16ms |
 | p95 < 100ms threshold | PASSED |
-| Redis FLUSHALL injected at | t=40s (mid-load) |
+| Redis FLUSHALL injected at | t=45s (mid-load) |
 | Interrupted ingest iterations | 0 (Postgres commit is unaffected by Redis) |
 | Deliveries succeeded | 14,399 |
 | Deliveries dead / lost | 0 |
@@ -223,7 +223,7 @@ All endpoints are under `:8080`. Auth: admin routes require `Authorization: Bear
 | `PATCH` | `/api/v1/applications/{app}/endpoints/{ep}` | admin | Set `status` to `enabled` or `disabled` |
 | `POST` | `/api/v1/applications/{app}/messages` | app key | Ingest event — `202` new, `200` duplicate `Idempotency-Key` |
 | `GET` | `/api/v1/applications/{app}/messages/{msg}` | app key | Message status + per-delivery attempt ledger |
-| `GET` | `/api/v1/applications/{app}/deliveries?status=dead` | app key | List deliveries by status (default: `dead`); paginated |
+| `GET` | `/api/v1/applications/{app}/deliveries?status=dead` | app key | List deliveries by status (default: `dead`); newest first, capped at 100, with total count |
 | `POST` | `/api/v1/applications/{app}/deliveries/redrive` | app key | Redrive by `delivery_ids`, `endpoint_id`, or `since`/`until` time range |
 | `GET` | `/healthz` | none | Liveness — always 200 if the process is up |
 | `GET` | `/readyz` | none | Readiness — checks Postgres + Redis connectivity |
