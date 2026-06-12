@@ -87,7 +87,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "redis unavailable")
 		return
 	}
-	if _, _, err := s.store.DeliveryState(r.Context(), "dlv_readycheck"); err != nil && !strings.Contains(err.Error(), "no rows") {
+	if err := s.store.Ping(r.Context()); err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "postgres unavailable")
 		return
 	}

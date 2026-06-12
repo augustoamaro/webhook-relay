@@ -58,7 +58,7 @@ func (s *Store) FinishSuccess(ctx context.Context, id string, statusCode int) er
 		UPDATE deliveries
 		SET status = 'succeeded', succeeded_at = now(), attempt_count = attempt_count + 1,
 		    claimed_at = NULL, last_status_code = $2, last_error = NULL
-		WHERE id = $1`, id, statusCode)
+		WHERE id = $1 AND status = 'delivering'`, id, statusCode)
 	return err
 }
 
@@ -79,7 +79,7 @@ func (s *Store) FinishFailure(ctx context.Context, id string, delay time.Duratio
 		    next_attempt_at = now() + make_interval(secs => $3),
 		    claimed_at = NULL, last_status_code = $4, last_error = $5,
 		    dead_reason = NULLIF($6, '')
-		WHERE id = $1`,
+		WHERE id = $1 AND status = 'delivering'`,
 		id, string(status), delay.Seconds(), code, errMsg, deadReason)
 	return err
 }

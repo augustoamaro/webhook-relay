@@ -13,6 +13,9 @@ import (
 	"github.com/augustoamaro/webhook-relay/internal/domain"
 	"github.com/augustoamaro/webhook-relay/internal/signer"
 	"github.com/augustoamaro/webhook-relay/internal/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const snippetCap = 4096
@@ -47,6 +50,16 @@ func (w *Worker) Handle(ctx context.Context, deliveryID string) {
 	if cd == nil {
 		return // lost the race, not due, or terminal
 	}
+
+	opts := []trace.SpanStartOption{}
+	if cd.Traceparent != "" {
+		linkCtx := otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{"traceparent": cd.Traceparent})
+		if sc := trace.SpanContextFromContext(linkCtx); sc.IsValid() {
+			opts = append(opts, trace.WithLinks(trace.Link{SpanContext: sc}))
+		}
+	}
+	ctx, span := otel.Tracer("webhook-relay").Start(ctx, "deliver", opts...)
+	defer span.End()
 
 	started := time.Now()
 	statusCode, errMsg, snippet := w.attempt(ctx, cd)

@@ -73,6 +73,9 @@ func (s *Store) Truncate(ctx context.Context) error {
 	return err
 }
 
+// Ping checks database connectivity.
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+
 // DeliveryState returns status and attempt_count (used by tests and reconcile).
 func (s *Store) DeliveryState(ctx context.Context, id string) (string, int, error) {
 	var status string

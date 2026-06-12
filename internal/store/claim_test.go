@@ -75,6 +75,43 @@ func TestFinishFailureSchedulesRetryThenSweeperFeedsIt(t *testing.T) {
 	}
 }
 
+// TestFinishSuccessDoesNotResurrectDeadRow proves Fix 1: if the circuit breaker
+// trips concurrently and sets status='dead' while the worker holds the claim,
+// FinishSuccess must not overwrite the dead row (the AND status='delivering'
+// guard makes it a no-op).
+func TestFinishSuccessDoesNotResurrectDeadRow(t *testing.T) {
+	s, ctx := testStore(t), context.Background()
+	dlvID, _ := seedDelivery(t, s)
+
+	// Claim the delivery (sets status='delivering').
+	c, err := s.ClaimDelivery(ctx, dlvID)
+	if err != nil || c == nil {
+		t.Fatalf("claim failed: %v", err)
+	}
+
+	// Simulate concurrent circuit-breaker trip: sets status='dead'.
+	if err := s.TripBreaker(ctx, c.EndpointID); err != nil {
+		t.Fatalf("trip breaker: %v", err)
+	}
+
+	// Confirm the row is now dead.
+	statusBefore, _, _ := s.DeliveryState(ctx, dlvID)
+	if statusBefore != "dead" {
+		t.Fatalf("expected status=dead after breaker trip, got %q", statusBefore)
+	}
+
+	// Worker's FinishSuccess must be a no-op (status guard blocks the update).
+	if err := s.FinishSuccess(ctx, dlvID, 200); err != nil {
+		t.Fatalf("FinishSuccess returned error: %v", err)
+	}
+
+	// Row must remain 'dead', not 'succeeded'.
+	statusAfter, _, _ := s.DeliveryState(ctx, dlvID)
+	if statusAfter != "dead" {
+		t.Fatalf("FinishSuccess resurrected a dead row: status=%q", statusAfter)
+	}
+}
+
 func TestFinishSuccessIsTerminal(t *testing.T) {
 	s, ctx := testStore(t), context.Background()
 	dlvID, _ := seedDelivery(t, s)
