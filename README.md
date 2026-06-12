@@ -176,7 +176,9 @@ curl -s -X POST $BASE/api/v1/applications/$APP_ID/deliveries/redrive \
 
 The compose stack includes a deliberately flaky demo receiver (`cmd/demo-receiver`, `FAIL_RATE=0.2`, `MAX_DELAY_MS=200`) that verifies signatures and logs every delivery — useful for watching retries and DLQ in real time. Grafana comes up at `:3000` with a provisioned dashboard showing ingest rate, deliveries/s by outcome, p95 attempt latency, queue depth, and DLQ size.
 
-_(Screenshot/GIF to be added at publish time.)_
+![webhook-relay Grafana dashboard under load — delivery rate by outcome, attempt and end-to-end p95, API request rate and latency, success ratio](docs/media/dashboard.png)
+
+_Provisioned dashboard under `make load`: the 20% flaky demo receiver drives the ~0.8 success ratio while retries and the DLQ absorb the rest._
 
 ---
 
