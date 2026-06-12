@@ -23,9 +23,7 @@ func testStore(t *testing.T) *Store {
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.pool.Exec(ctx,
-		`TRUNCATE applications, endpoints, messages, deliveries, delivery_attempts CASCADE`)
-	if err != nil {
+	if err := s.Truncate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	return s

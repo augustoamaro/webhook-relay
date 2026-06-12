@@ -45,3 +45,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 	defer db.Close()
 	return goose.UpContext(ctx, db, "migrations")
 }
+
+// Truncate empties all tables. Test helper for packages outside store.
+func (s *Store) Truncate(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx,
+		`TRUNCATE applications, endpoints, messages, deliveries, delivery_attempts CASCADE`)
+	return err
+}
+
+// DeliveryState returns status and attempt_count (used by tests and reconcile).
+func (s *Store) DeliveryState(ctx context.Context, id string) (string, int, error) {
+	var status string
+	var attempts int
+	err := s.pool.QueryRow(ctx,
+		`SELECT status, attempt_count FROM deliveries WHERE id = $1`, id).Scan(&status, &attempts)
+	return status, attempts, err
+}
