@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -33,5 +34,25 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	s := testStore(t)
 	if err := s.Migrate(context.Background()); err != nil {
 		t.Fatalf("second migrate failed: %v", err)
+	}
+}
+
+func TestMigrateConcurrent(t *testing.T) {
+	s := testStore(t) // opens + migrates + truncates
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- s.Migrate(context.Background())
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent migrate failed: %v", err)
+		}
 	}
 }

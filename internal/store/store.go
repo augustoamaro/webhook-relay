@@ -36,7 +36,22 @@ func (s *Store) Close() { s.pool.Close() }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 
+// migrationLockKey is an arbitrary fixed key for the advisory lock that
+// serializes concurrent Migrate() callers (api/worker/sweeper all migrate on boot).
+const migrationLockKey int64 = 0x7762_7265_6C61_79 // "wbrelay"
+
 func (s *Store) Migrate(ctx context.Context) error {
+	// Serialize concurrent migrators (multiple replicas start together).
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration conn: %w", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() { _, _ = conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", migrationLockKey) }()
+
 	goose.SetBaseFS(migrationsFS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
