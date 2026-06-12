@@ -4,8 +4,10 @@ package store
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -31,6 +33,8 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 }
 
 func (s *Store) Close() { s.pool.Close() }
+
+func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 
 func (s *Store) Migrate(ctx context.Context) error {
 	goose.SetBaseFS(migrationsFS)
